@@ -1,0 +1,156 @@
+---
+title: "eds213_data_cleaning_assign_peter_vitale"
+format: html
+author: Peter Vitale
+date: April 14 2026
+---
+
+In this assignment we are going to be cleaning the `ASDN_Snow_survey.csv` dataset, particularly the `snow_cover`, `water_cover`, `land_cover`, and `total_cover` columns. 
+
+`snow_cover` was cleaned in class and we will be focusing on:
+
+-  Clean the Water_cover column to transform it into the correct data type and respect expectations for a percentage
+
+-  Clean the Land_cover column to transform it into the correct data type and respect expectations for a percentage
+
+-  Use the relationship that the three cover columns (Snow, Water, Land) should sum up to 100% to infer missing values where possible and recompute the Total_cover column as needed
+
+First we read the data 
+
+## Read Data
+
+```{r}
+#| message: false  
+
+# Libraries
+library(tidyverse)
+
+# file names
+datadir_raw <- file.path("data","raw")
+
+datadir_processed <- file.path("data", "processed/")
+
+snowsurvey_file <- "ASDN_Snow_survey.csv"
+
+snowsurvey_csv <- read_csv(file.path(datadir_raw, snowsurvey_file))
+```
+
+Next we need to check the values of each to see where the issues are 
+
+```{r}
+snowsurvey_csv %>%
+  count(Snow_cover) %>% 
+  filter(is.na(as.numeric(Snow_cover)))
+```
+and repeat this process for the other columns (we'll get to `total_cover` later)
+
+
+```{r}
+snowsurvey_csv %>%
+  count(Land_cover) %>% 
+  filter(is.na(as.numeric(Land_cover)))
+
+
+snowsurvey_csv %>%
+  count(Water_cover) %>% 
+  filter(is.na(as.numeric(Water_cover)))
+```
+
+Ok so: Snow cover is the only column with `<1` as a category, so thats the only one becoming 0. The rest will become NA across the board. 
+
+```{r}
+# I'm using case when for this first one just because of that <1
+snowsurvey_fixed <- snowsurvey_csv %>% 
+  mutate(Snow_cover = case_when(
+    Snow_cover %in% c('-', '.', 'n/a', 'unk') ~ NA,
+    Snow_cover == '<1' ~ '0', # This has to be a character for now 
+    TRUE ~ Snow_cover
+  )) %>% 
+  # This fixes the numeric issue and is a little check that the fix worked
+  mutate(Snow_cover = as.numeric(Snow_cover))
+
+class(snowsurvey_fixed$Snow_cover) # And a final check 
+```
+Looks great! The other two are much easier
+
+```{r}
+snowsurvey_fixed <- snowsurvey_fixed %>% 
+  # Mutate
+  mutate(
+    Land_cover = ifelse(Land_cover %in% c('-', '.', 'n/a', 'unk'), NA, Land_cover),
+    Water_cover = ifelse(Water_cover %in% c('-', '.', 'n/a', 'unk'), NA, Water_cover)
+         ) %>% 
+  # And update to numeric
+  mutate(
+    Land_cover = as.numeric(Land_cover),
+    Water_cover = as.numeric(Water_cover)
+         )
+
+class(snowsurvey_fixed$Land_cover)
+class(snowsurvey_fixed$Water_cover)
+```
+
+Great! All those columns are numeric and now we can update `Total_cover`
+
+```{r}
+snowsurvey_fixed <- snowsurvey_fixed %>%
+  # Sum the rows across the three rows, removing NA's
+  mutate(Total_cover = rowSums(across(c(Snow_cover, Land_cover, Water_cover)), na.rm = TRUE))
+
+# Now if I look at the max and min of total_cover they should both be 0
+max(snowsurvey_fixed$Total_cover)
+min(snowsurvey_fixed$Total_cover)
+```
+
+Thats not quite right, lets see where those values are coming from 
+```{r}
+snowsurvey_fixed %>% 
+  filter(!Total_cover == 100) %>% 
+  select(Snow_cover, Water_cover, Land_cover, Total_cover)
+
+# It looks like a lot of the 0's are coming from NA's and other values are coming from something else, lets get rid of the NA's first
+
+snowsurvey_fixed <- snowsurvey_fixed %>% 
+  filter(!is.na(Snow_cover) & !is.na(Water_cover) & !is.na(Land_cover))
+
+snowsurvey_fixed %>% 
+  filter(!Total_cover == 100)%>% 
+  select(Snow_cover, Water_cover, Land_cover, Total_cover)
+
+# We still have ~4.5k observations that dont add up to 100. Thats a bit too much to drop so lets focus on the 0's and that big 470
+snowsurvey_fixed %>% 
+  filter(Total_cover == 470 | Total_cover == 0)%>% 
+  select(Snow_cover, Water_cover, Land_cover, Total_cover)
+
+# Thats still 1.2k rows: but only 1 that adds to 470 what about just observations over 100 for total cover? 
+snowsurvey_fixed %>% 
+  filter(Total_cover > 100)%>% 
+  select(Snow_cover, Water_cover, Land_cover, Total_cover)
+
+# Only 27 rows
+```
+
+Based on the checks that I had in the last homework 1 in my sql query I should just drop all these rows, that way it can be in a database cleanly. While it is 10% of our data, I would rather have clean data that does not require me to manipulate the raw data e.g adding any excess/dearth in `total_cover` from the other covers. It is also stated in the metadata that this 'should add up to 100' so I am hesitant to keep any that don't.
+
+```{r}
+snowsurvey_fixed <- snowsurvey_fixed %>% 
+  filter(Total_cover == 100) 
+```
+
+
+This decreases my original data by: 
+```{r}
+print(paste0(round(1 - nrow(snowsurvey_fixed)/nrow(snowsurvey_csv),2) *100, "%"))
+```
+ 
+Which I consider a manageable loss. 
+
+Now we can export the csv
+```{r}
+# check if the folder exists
+dir.create(datadir_processed, showWarnings = FALSE)
+
+# write the file
+write_csv(snowsurvey_fixed, file.path(datadir_processed, "all_cover_fixed_peter_vitale.csv"))
+```
+
