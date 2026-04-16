@@ -85,7 +85,7 @@ snowsurvey_fixed <- snowsurvey_fixed %>%
     Land_cover = as.numeric(Land_cover),
     Water_cover = as.numeric(Water_cover)
          )
-
+# Add a check to make sure that went through 
 class(snowsurvey_fixed$Land_cover)
 class(snowsurvey_fixed$Water_cover)
 ```
@@ -113,16 +113,19 @@ snowsurvey_fixed %>%
 snowsurvey_fixed <- snowsurvey_fixed %>% 
   filter(!is.na(Snow_cover) & !is.na(Water_cover) & !is.na(Land_cover))
 
+# And check again 
 snowsurvey_fixed %>% 
   filter(!Total_cover == 100)%>% 
   select(Snow_cover, Water_cover, Land_cover, Total_cover)
 
-# We still have ~4.5k observations that dont add up to 100. Thats a bit too much to drop so lets focus on the 0's and that big 470
+# We still have ~4.5k observations that dont add up to 100. Thats a bit too much to drop for now so lets focus on the 0's and that big 470
+
 snowsurvey_fixed %>% 
   filter(Total_cover == 470 | Total_cover == 0)%>% 
   select(Snow_cover, Water_cover, Land_cover, Total_cover)
 
 # Thats still 1.2k rows: but only 1 that adds to 470 what about just observations over 100 for total cover? 
+
 snowsurvey_fixed %>% 
   filter(Total_cover > 100)%>% 
   select(Snow_cover, Water_cover, Land_cover, Total_cover)
@@ -130,7 +133,8 @@ snowsurvey_fixed %>%
 # Only 27 rows
 ```
 
-Based on the checks that I had in the last homework 1 in my sql query I should just drop all these rows, that way it can be in a database cleanly. While it is 10% of our data, I would rather have clean data that does not require me to manipulate the raw data e.g adding any excess/dearth in `total_cover` from the other covers. It is also stated in the metadata that this 'should add up to 100' so I am hesitant to keep any that don't.
+Based on the checks that I had in the last homework 1.2 in my sql query, I should just drop all these rows, that way it can be in a database cleanly. While it is 10% of our data, I would rather have clean data that does not require me to manipulate the raw data e.g adding any excess/dearth in `total_cover` from the other covers. It is also stated in the metadata that this 'should add up to 100' so I
+am hesitant to keep any that don't naturally add to 100. 
 
 ```{r}
 snowsurvey_fixed <- snowsurvey_fixed %>% 
